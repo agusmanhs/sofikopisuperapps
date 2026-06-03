@@ -11,108 +11,101 @@ import {
   ScrollView,
   Dimensions,
   StatusBar,
+  PermissionsAndroid,
+  Platform,
 } from "react-native";
-import { CameraView, useCameraPermissions } from "expo-camera";
-import * as Location from "expo-location";
-import { Ionicons } from "@expo/vector-icons";
+import {
+  Camera,
+  useCameraPermission,
+  useCameraDevice,
+} from "react-native-vision-camera";
+import Geolocation from "react-native-geolocation-service";
+import Ionicons from "react-native-vector-icons/Ionicons";
 import { COLORS } from "../constants/colors";
 
 const { width, height } = Dimensions.get("window");
 
 export const AttendanceScreen = ({ navigation }: any) => {
-  // State Izin
-  const [permission, requestPermission] = useCameraPermissions();
+  const { hasPermission: hasCamPermission, requestPermission: requestCamPermission } =
+    useCameraPermission();
+  const device = useCameraDevice("front");
 
-  // State Data
-  const [location, setLocation] = useState<Location.LocationObject | null>(
-    null,
-  );
+  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [address, setAddress] = useState<string>("-");
   const [photo, setPhoto] = useState<string | null>(null);
 
-  // State UI
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(false);
-  const [isCameraReady, setIsCameraReady] = useState(false);
   const [sending, setSending] = useState(false);
 
-  const cameraRef = useRef<CameraView>(null);
+  const cameraRef = useRef<Camera>(null);
 
-  // Minta izin saat pertama kali buka
   useEffect(() => {
     (async () => {
-      if (permission && !permission.granted) {
-        await requestPermission();
+      if (!hasCamPermission) {
+        await requestCamPermission();
       }
     })();
-  }, [permission]);
+  }, [hasCamPermission]);
 
-  // 1. Fungsi Manual Cek Lokasi
   const handleGetLocation = async () => {
     setLoadingLocation(true);
     try {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Izin Ditolak", "Aktifkan izin lokasi di pengaturan.");
-        setLoadingLocation(false);
-        return;
-      }
-
-      let loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-      setLocation(loc);
-
-      let geocode = await Location.reverseGeocodeAsync({
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-      });
-
-      if (geocode.length > 0) {
-        const g = geocode[0];
-        setAddress(`${g.street || ""} ${g.name || ""}, ${g.city || ""}`);
+      if (Platform.OS === "android") {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert("Izin Ditolak", "Aktifkan izin lokasi di pengaturan.");
+          setLoadingLocation(false);
+          return;
+        }
       } else {
-        setAddress("Alamat tidak ditemukan");
+        const auth = await Geolocation.requestAuthorization("whenInUse");
+        if (auth !== "granted") {
+          Alert.alert("Izin Ditolak", "Aktifkan izin lokasi di pengaturan.");
+          setLoadingLocation(false);
+          return;
+        }
       }
+
+      Geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setLocation({ latitude, longitude });
+          setAddress(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+          setLoadingLocation(false);
+        },
+        (error) => {
+          Alert.alert("Error", "Gagal mendeteksi lokasi. Pastikan GPS aktif.");
+          setLoadingLocation(false);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
+      );
     } catch (error) {
-      Alert.alert("Error", "Gagal mendeteksi lokasi. Pastikan GPS aktif.");
-    } finally {
+      Alert.alert("Error", "Gagal mendeteksi lokasi.");
       setLoadingLocation(false);
     }
   };
 
-  // 2. Fungsi Buka Kamera
   const openCamera = async () => {
-    if (!permission?.granted) {
-      const { granted } = await requestPermission();
+    if (!hasCamPermission) {
+      const granted = await requestCamPermission();
       if (!granted) {
         Alert.alert("Izin", "Kamera butuh izin akses.");
         return;
       }
     }
-    // Reset state kamera
-    setIsCameraReady(false);
     setIsCameraOpen(true);
   };
 
-  // 3. Fungsi Jepret Foto
   const takePicture = async () => {
-    if (cameraRef.current && isCameraReady) {
+    if (cameraRef.current) {
       try {
-        console.log("Mulai mengambil foto..."); // Debug log
-
-        const photoData = await cameraRef.current.takePictureAsync({
-          quality: 0.7, // Kualitas standar (0.0 - 1.0)
-          base64: false, // Kita tidak butuh base64 untuk preview, biar ringan
-          // HAPUS baris 'skipProcessing: true' karena sering error di iOS
-          exif: false, // Tidak perlu metadata agar lebih cepat
-        });
-
-        console.log("Hasil Foto:", photoData?.uri); // Debug log
-
-        if (photoData?.uri) {
-          setPhoto(photoData.uri);
-          setIsCameraOpen(false); // Tutup kamera
+        const photoData = await cameraRef.current.takePhoto({ quality: 70 });
+        if (photoData?.path) {
+          setPhoto(`file://${photoData.path}`);
+          setIsCameraOpen(false);
         } else {
           Alert.alert("Error", "Gagal: URI foto kosong.");
         }
@@ -120,12 +113,9 @@ export const AttendanceScreen = ({ navigation }: any) => {
         console.error("CAPTURE ERROR:", error);
         Alert.alert("Error", "Gagal mengambil foto. Pastikan wajah terlihat.");
       }
-    } else {
-      Alert.alert("Loading", "Tunggu kamera siap sepenuhnya...");
     }
   };
 
-  // 4. Kirim Data
   const handleSubmit = () => {
     if (!photo || !location) {
       Alert.alert("Peringatan", "Lengkapi data foto dan lokasi.");
@@ -140,29 +130,27 @@ export const AttendanceScreen = ({ navigation }: any) => {
     }, 2000);
   };
 
-  // --- RENDERING TAMPILAN KAMERA (FULLSCREEN PENGGANTI MODAL) ---
   if (isCameraOpen) {
+    if (!device) {
+      return (
+        <View style={styles.cameraContainer}>
+          <Text style={{ color: "#fff", textAlign: "center", marginTop: 100 }}>
+            Kamera depan tidak tersedia
+          </Text>
+        </View>
+      );
+    }
     return (
       <View style={styles.cameraContainer}>
         <StatusBar hidden />
-        <CameraView
+        <Camera
           style={{ flex: 1 }}
-          facing="front"
-          mode="picture" // <--- TAMBAHKAN INI UNTUK KEPASTIAN
+          device={device}
+          isActive={true}
           ref={cameraRef}
-          onCameraReady={() => {
-            console.log("Kamera Siap!"); // Debugging
-            setIsCameraReady(true);
-          }}
-          onMountError={(error) => {
-            console.log("Camera Mount Error:", error);
-            Alert.alert("Error Kamera", "Kamera gagal dimuat.");
-            setIsCameraOpen(false);
-          }}
+          photo={true}
         >
-          {/* Overlay UI Kamera */}
           <SafeAreaView style={styles.cameraOverlay}>
-            {/* Tombol Tutup (Kiri Atas) */}
             <TouchableOpacity
               style={styles.closeCameraBtn}
               onPress={() => setIsCameraOpen(false)}
@@ -170,32 +158,27 @@ export const AttendanceScreen = ({ navigation }: any) => {
               <Ionicons name="close" size={30} color="#fff" />
             </TouchableOpacity>
 
-            {/* Area Shutter (Bawah) */}
             <View style={styles.shutterArea}>
               <Text style={styles.cameraHint}>
                 Pastikan wajah terlihat jelas
               </Text>
-
               <TouchableOpacity
-                style={[styles.shutterBtn, !isCameraReady && { opacity: 0.5 }]}
+                style={styles.shutterBtn}
                 onPress={takePicture}
-                disabled={!isCameraReady}
               >
                 <View style={styles.shutterInner} />
               </TouchableOpacity>
             </View>
           </SafeAreaView>
-        </CameraView>
+        </Camera>
       </View>
     );
   }
 
-  // --- RENDERING FORM UTAMA ---
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      {/* Header Halaman */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -208,14 +191,9 @@ export const AttendanceScreen = ({ navigation }: any) => {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* SECTION 1: LOKASI */}
         <View style={styles.card}>
           <View style={styles.cardTitleRow}>
-            <Ionicons
-              name="location-outline"
-              size={20}
-              color={COLORS.primary}
-            />
+            <Ionicons name="location-outline" size={20} color={COLORS.primary} />
             <Text style={styles.cardTitle}>Lokasi Anda</Text>
           </View>
 
@@ -224,7 +202,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
               <>
                 <Text style={styles.addressText}>{address}</Text>
                 <Text style={styles.coordText}>
-                  {location.coords.latitude}, {location.coords.longitude}
+                  {location.latitude}, {location.longitude}
                 </Text>
               </>
             ) : (
@@ -250,7 +228,6 @@ export const AttendanceScreen = ({ navigation }: any) => {
           </TouchableOpacity>
         </View>
 
-        {/* SECTION 2: FOTO */}
         <View style={styles.card}>
           <View style={styles.cardTitleRow}>
             <Ionicons name="camera-outline" size={20} color={COLORS.primary} />
@@ -283,7 +260,6 @@ export const AttendanceScreen = ({ navigation }: any) => {
           </TouchableOpacity>
         </View>
 
-        {/* TOMBOL KIRIM */}
         <View style={styles.footerSpace}>
           <TouchableOpacity
             style={[
@@ -350,7 +326,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
-  // Location Styles
   locationBox: {
     backgroundColor: "#f9f9f9",
     padding: 15,
@@ -365,7 +340,6 @@ const styles = StyleSheet.create({
   coordText: { fontSize: 11, color: "#999", marginTop: 5 },
   placeholderText: { color: "#aaa", fontSize: 13, textAlign: "center" },
 
-  // Photo Styles
   photoBox: {
     height: 300,
     backgroundColor: "#f0f0f0",
@@ -380,7 +354,6 @@ const styles = StyleSheet.create({
   previewImage: { width: "100%", height: "100%" },
   emptyPhoto: { alignItems: "center" },
 
-  // Buttons
   actionButton: {
     flexDirection: "row",
     justifyContent: "center",
@@ -410,7 +383,6 @@ const styles = StyleSheet.create({
   disabledBtn: { backgroundColor: "#ccc", shadowOpacity: 0, elevation: 0 },
   submitText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
 
-  // CAMERA FULLSCREEN STYLES (Pengganti Modal)
   cameraContainer: {
     flex: 1,
     backgroundColor: "#000",

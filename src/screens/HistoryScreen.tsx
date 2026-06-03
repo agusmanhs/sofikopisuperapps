@@ -13,8 +13,8 @@ import {
   Dimensions,
   StatusBar,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient"; // Import Gradient
-import { Ionicons } from "@expo/vector-icons";
+import LinearGradient from "react-native-linear-gradient";
+import Ionicons from "react-native-vector-icons/Ionicons";
 import { COLORS } from "../constants/colors";
 import { tokenService } from "../services/tokenService";
 import { authService } from "../services/authService";

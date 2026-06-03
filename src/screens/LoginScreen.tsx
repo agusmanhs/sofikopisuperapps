@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   StatusBar,
+  Image,
 } from "react-native";
 import { CustomInput } from "../components/CustomInput";
 import { CustomButton } from "../components/CustomButton";
@@ -65,6 +66,11 @@ export const LoginScreen = ({ navigation }: any) => {
       >
         <View style={styles.card}>
           <View style={styles.header}>
+            <Image
+              source={require("../assets/images/logo-merah.png")}
+              style={styles.logo}
+              resizeMode="contain"
+            />
             <Text style={styles.title}>Absensi Mobile</Text>
             <Text style={styles.subtitle}>Login User</Text>
           </View>
@@ -115,6 +121,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
   },
   header: { alignItems: "center", marginBottom: 30 },
+  logo: { width: 90, height: 90, marginBottom: 10 },
   title: { fontSize: 28, fontWeight: "bold", color: COLORS.primary },
   subtitle: { fontSize: 14, color: COLORS.textSecondary, marginTop: 5 },
   footer: { marginTop: 20, alignItems: "center" },

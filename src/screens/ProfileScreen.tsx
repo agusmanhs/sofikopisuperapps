@@ -8,21 +8,101 @@ import {
   Alert,
   StatusBar,
   ActivityIndicator,
+  Image,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
+import LinearGradient from "react-native-linear-gradient";
+import Ionicons from "react-native-vector-icons/Ionicons";
+import {
+  launchCamera,
+  launchImageLibrary,
+  Asset,
+} from "react-native-image-picker";
+import { initialWindowMetrics } from "react-native-safe-area-context";
 import { COLORS } from "../constants/colors";
-import { authService } from "../services/authService";
+import { authService, resolveMediaUrl } from "../services/authService";
 import { tokenService } from "../services/tokenService";
 import { UserProfile } from "../types/api";
+
+const TOP_INSET = initialWindowMetrics?.insets.top ?? 47;
 
 export const ProfileScreen = ({ navigation }: any) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [uploadingFoto, setUploadingFoto] = useState(false);
 
   useEffect(() => {
     fetchProfile();
   }, []);
+
+  // URL foto yang dapat dimuat — null jika masih pakai avatar default backend
+  const fotoUrl = (() => {
+    const raw = user?.pegawai?.foto_url;
+    if (!raw || !raw.includes("/storage/")) return null;
+    return resolveMediaUrl(raw);
+  })();
+
+  const handleChangeFoto = () => {
+    Alert.alert("Ubah Foto Profil", "Pilih sumber foto", [
+      { text: "Kamera", onPress: () => pickPhoto("camera") },
+      { text: "Galeri", onPress: () => pickPhoto("library") },
+      { text: "Batal", style: "cancel" },
+    ]);
+  };
+
+  const pickPhoto = async (source: "camera" | "library") => {
+    const options = {
+      mediaType: "photo" as const,
+      quality: 0.7 as const,
+      maxWidth: 800,
+      maxHeight: 800,
+      includeBase64: false,
+    };
+
+    const result =
+      source === "camera"
+        ? await launchCamera(options)
+        : await launchImageLibrary(options);
+
+    if (result.didCancel) return;
+    if (result.errorCode) {
+      Alert.alert("Gagal", result.errorMessage || "Tidak dapat mengambil foto.");
+      return;
+    }
+
+    const asset: Asset | undefined = result.assets?.[0];
+    if (!asset?.uri) return;
+
+    await uploadFoto(asset);
+  };
+
+  const uploadFoto = async (asset: Asset) => {
+    if (!user) return;
+    setUploadingFoto(true);
+    try {
+      const token = await tokenService.getToken();
+      if (!token) throw new Error("Sesi tidak ditemukan, silakan login ulang.");
+
+      const response = await authService.updateProfile(token, {
+        name: user.name,
+        email: user.email,
+        nama_lengkap: user.pegawai?.nama_lengkap || user.name,
+        no_telp: user.pegawai?.no_hp,
+        alamat: user.pegawai?.alamat,
+        foto: {
+          uri: asset.uri!,
+          type: asset.type || "image/jpeg",
+          name: asset.fileName || "profile.jpg",
+        },
+      });
+
+      setUser(response.data);
+      Alert.alert("Berhasil", "Foto profil berhasil diperbarui.");
+    } catch (error: any) {
+      Alert.alert("Gagal", error.message || "Terjadi kesalahan saat mengunggah foto.");
+    } finally {
+      setUploadingFoto(false);
+    }
+  };
 
   const fetchProfile = async () => {
     try {
@@ -88,6 +168,9 @@ export const ProfileScreen = ({ navigation }: any) => {
         translucent={true}
       />
 
+      {/* Cat area status bar dengan merah agar menyatu dengan header */}
+      <View style={styles.statusBarBg} />
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -124,19 +207,38 @@ export const ProfileScreen = ({ navigation }: any) => {
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatarWrapper}>
-              <View
-                style={[
-                  styles.avatarPlaceholder,
-                  { backgroundColor: COLORS.primary + "10" },
-                ]}
+              {fotoUrl ? (
+                <Image
+                  source={{ uri: fotoUrl }}
+                  style={styles.avatarPlaceholder}
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.avatarPlaceholder,
+                    { backgroundColor: COLORS.primary + "10" },
+                  ]}
+                >
+                  <Text style={styles.avatarText}>
+                    {user
+                      ? getInitials(user.pegawai?.nama_lengkap || user.name)
+                      : "A"}
+                  </Text>
+                </View>
+              )}
+
+              {uploadingFoto && (
+                <View style={styles.avatarLoadingOverlay}>
+                  <ActivityIndicator color="#fff" size="small" />
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={styles.editBadge}
+                onPress={handleChangeFoto}
+                disabled={uploadingFoto}
+                activeOpacity={0.7}
               >
-                <Text style={styles.avatarText}>
-                  {user
-                    ? getInitials(user.pegawai?.nama_lengkap || user.name)
-                    : "A"}
-                </Text>
-              </View>
-              <TouchableOpacity style={styles.editBadge}>
                 <Ionicons name="camera" size={14} color="#fff" />
               </TouchableOpacity>
             </View>
@@ -193,7 +295,15 @@ export const ProfileScreen = ({ navigation }: any) => {
         <View style={styles.menuContainer}>
           <Text style={styles.menuHeader}>Akun & Keamanan</Text>
 
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() =>
+              user && navigation.navigate("EditProfile", {
+                user,
+                onSaved: fetchProfile,
+              })
+            }
+          >
             <View style={[styles.menuIconBox, { backgroundColor: "#E3F2FD" }]}>
               <Ionicons
                 name="person-circle-outline"
@@ -205,7 +315,10 @@ export const ProfileScreen = ({ navigation }: any) => {
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => navigation.navigate("ChangePassword")}
+          >
             <View style={[styles.menuIconBox, { backgroundColor: "#FFF3E0" }]}>
               <Ionicons name="lock-closed-outline" size={22} color="#FF9800" />
             </View>
@@ -234,13 +347,22 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   scrollContent: { paddingBottom: 40 },
 
+  statusBarBg: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: TOP_INSET + 60,
+    backgroundColor: COLORS.primary,
+  },
+
   // HEADER (UPDATED)
-  headerContainer: { height: 180, position: "relative", marginBottom: 60 },
+  headerContainer: { height: TOP_INSET + 170, position: "relative", marginBottom: 60 },
   headerGradient: {
     flex: 1,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
-    paddingTop: 40, // Padding untuk StatusBar
+    paddingTop: TOP_INSET + 8, // Padding untuk StatusBar
   },
   headerContent: {
     flexDirection: "row",
@@ -296,6 +418,17 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   avatarText: { fontSize: 32, fontWeight: "bold", color: COLORS.primary },
+  avatarLoadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   editBadge: {
     position: "absolute",
     bottom: 0,
