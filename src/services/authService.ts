@@ -1,9 +1,9 @@
 import { LoginRequest, LoginResponse, ProfileResponse, HistoryResponse, UpdateProfileRequest, UpdateProfileResponse, StatistikResponse, JenisIzinResponse, IzinListResponse, CreateIzinRequest, CreateIzinResponse, AdminIzinListResponse, InformasiResponse } from "../types/api";
 
-const API_BASE_URL = "http://sofikopi-web-app.test/api";
+const API_BASE_URL = "https://absensi.sofikopi.id/api";
 
 // Host tanpa "/api" — untuk resolve path foto/storage yang relatif
-export const MEDIA_BASE_URL = "http://sofikopi-web-app.test";
+export const MEDIA_BASE_URL = "https://absensi.sofikopi.id";
 
 // Ubah foto_url (bisa relatif "/storage/..") jadi URL absolut yang bisa dimuat <Image>
 export const resolveMediaUrl = (path?: string | null): string | null => {
