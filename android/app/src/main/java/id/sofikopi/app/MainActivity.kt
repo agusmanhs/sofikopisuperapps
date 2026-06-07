@@ -1,4 +1,4 @@
-package com.agusmanhs.absensi
+package id.sofikopi.app
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

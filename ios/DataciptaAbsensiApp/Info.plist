@@ -27,7 +27,7 @@
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.anonymous.DataciptaAbsensiApp</string>
+				<string>id.sofikopi.app</string>
 			</array>
 		</dict>
 	</array>

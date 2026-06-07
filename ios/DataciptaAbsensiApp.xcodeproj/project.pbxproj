@@ -345,7 +345,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.agusmanhs.absensi;
+				PRODUCT_BUNDLE_IDENTIFIER = id.sofikopi.app;
 				PRODUCT_NAME = DataciptaAbsensiApp;
 				SWIFT_OBJC_BRIDGING_HEADER = "DataciptaAbsensiApp/DataciptaAbsensiApp-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -376,7 +376,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.agusmanhs.absensi;
+				PRODUCT_BUNDLE_IDENTIFIER = id.sofikopi.app;
 				PRODUCT_NAME = DataciptaAbsensiApp;
 				SWIFT_OBJC_BRIDGING_HEADER = "DataciptaAbsensiApp/DataciptaAbsensiApp-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
